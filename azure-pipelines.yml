@@ -1,0 +1,67 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: build
+  jobs:
+  - job: build_job
+    steps:
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: 'sudo npm install -g azure-functions-core-tools@3 --unsafe-perm true'
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: 'sudo npm install'
+    - task: Bash@3
+      inputs:
+        targetType: 'inline'
+        script: 'sudo npm run build:production'
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: '.'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/playgroundfunctionapp.zip'
+        replaceExistingArchive: true
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'artifact'
+        publishLocation: 'Container'
+- stage: deploy_in_dev
+  jobs:
+  - deployment: deploy_in_dev
+    environment: 'dev'
+    strategy:
+     runOnce:
+       deploy:
+         steps:
+         - task: DownloadBuildArtifacts@0
+           inputs:
+             buildType: 'current'
+             downloadType: 'single'
+             artifactName: 'artifact'
+             downloadPath: '$(Build.SourcesDirectory)'
+         - task: ExtractFiles@1
+           inputs:
+            archiveFilePatterns: '**/*.zip'
+            destinationFolder: '$(Build.SourcesDirectory)'
+            cleanDestinationFolder: false
+         - task: AzureCLI@2
+           inputs:
+             azureSubscription: 'Playground Resource Group'
+             scriptType: 'bash'
+             scriptLocation: 'inlineScript'
+             inlineScript: |
+               sudo npm install -g azure-functions-core-tools@3 --unsafe-perm true
+               func azure functionapp publish playground-function-app-1 --javascript
